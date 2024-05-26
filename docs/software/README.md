@@ -160,133 +160,174 @@ SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
 ```
 
 ## RESTfull сервіс для управління даними
-### Model
-```Java
-package com.example.db6;
-
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Table;
-import org.springframework.data.annotation.Id;
-
-@Entity
-@Table(name = "action")
-public class ActionModel {
-    @jakarta.persistence.Id
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
-    private String name;
-    private String description;
-    private Integer userID;
-
-    public Integer getId() {
-        return id;
+### appsettings.json
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Port=3306;Database=mcas;Uid=root;Pwd=12345;"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
     }
-
-    public void setId(Integer id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public Integer getUserID() {
-        return userID;
-    }
-
-    public void setUserID(Integer userID) {
-        this.userID = userID;
-    }
-
-    @Override
-    public String toString() {
-        return "ActionModel{" +
-                "id=" + id +
-                ", name='" + name + '\'' +
-                ", description='" + description + '\'' +
-                ", userID=" + userID +
-                '}';
-    }
+  },
+  "AllowedHosts": "*"
 }
 ```
+### Program.cs
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Lab6.Data;
 
-### Repository
+var builder = WebApplication.CreateBuilder(args);
 
-```Java
-package com.example.db6;
+builder.Services.AddDbContext<AplicationDbContext>(options =>
+    options.UseMySql(builder.Configuration.GetConnectionString("DefaultConnection"), new MySqlServerVersion(new Version(8, 0, 37))));
 
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+builder.Services.AddControllers();
 
-@Repository
-public interface ActionRepository extends JpaRepository<ActionModel, Integer> {
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
+
+app.UseHttpsRedirection();
+app.MapControllers();
+
+app.Run();
 ```
+### role.cs
+```csharp
+using System.ComponentModel.DataAnnotations;
 
-### Controller
-
-```Java
-package com.example.db6;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.Optional;
-
-@RestController
-public class ActionController {
-    @Autowired
-    private ActionRepository actionRepository;
-
-    @GetMapping("/get-actions")
-    public List<ActionModel> getRoles() {
-        return actionRepository.findAll();
+namespace Lab6.Models
+{
+    public class role
+    {
+        [Key]
+        public int id { get; set; }
+        public string name { get; set; }
+        public string description { get; set; }
     }
+}
 
-    @GetMapping("/get-actions/{id}")
-    public Optional<ActionModel> getRoleById(@PathVariable Integer id) {
-        return actionRepository.findById(id);
-    }
+```
+### user.cs
+```csharp
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 
-    @PostMapping("/add-action")
-    public ActionModel addRole(@RequestBody ActionModel actionModel) {
-        return actionRepository.save(actionModel);
-    }
-
-    @DeleteMapping("/delete-action/{id}")
-    public String deleteRole(@PathVariable Integer id) {
-        actionRepository.deleteById(id);
-        if (actionRepository.findById(id).isEmpty()) {
-            return "action successfully deleted";
-        } else {
-            return "error, action wasn't deleted";
+namespace Lab6.Models
+{
+    public class user
+    {
+        [Key]
+        public int Id { get; set; }
+        public string Email { get; set; }
+        public string Password { get; set; }
+        public int roleId { get; set; }
+        [ForeignKey("roleId")]
+        public role role_id { get; set; }
+        public user(string email, string password)
+        {
+            this.Email = email;
+            this.Password = password;
         }
     }
+}
 
-    @PutMapping("/update-action/{id}")
-    public ActionModel updateAction(@PathVariable Integer id, @RequestBody ActionModel actionModel) {
-        ActionModel action = actionRepository.findById(id).orElseThrow();
-        action.setName(actionModel.getName());
-        action.setDescription(actionModel.getDescription());
-        action.setUserID(actionModel.getUserID());
-        return actionRepository.save(action);
+```
+### userDTO.cs
+```csharp
+using System.ComponentModel.DataAnnotations;
+
+namespace Lab6.Models
+{
+    public class userDTO
+    {
+        [Required]
+        public string email { get; set; }
+        [Required]
+        public string password { get; set; }
     }
 }
+
+```
+### AplicationDbContext.cs
+```csharp
+using Microsoft.EntityFrameworkCore;
+using System.Data;
+using Lab6.Models;
+
+namespace Lab6.Data
+{
+    public class AplicationDbContext : DbContext
+    {
+        public AplicationDbContext(DbContextOptions<AplicationDbContext> options) : base(options)
+        {
+        }
+
+        public DbSet<user> Users { get; set; }
+        public DbSet<role> Roles { get; set; }
+    }
+}
+
+```
+### usercontroller.cs
+```csharp
+using Lab6.Data;
+using Lab6.Models;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Lab6.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class usercontroller : ControllerBase
+    {
+        private readonly AplicationDbContext _db;
+
+        public usercontroller(AplicationDbContext db)
+        {
+            _db = db;
+        }
+
+        [HttpPost("Register")]
+        public async Task<IActionResult> Register([FromBody] userDTO regUserDto)
+        {
+            var user = new user(regUserDto.email, regUserDto.password);
+
+            user.roleId = 1;
+
+            var testUserEmail = _db.Users.FirstOrDefault(u => u.Email == user.Email);
+
+            if (testUserEmail != null)
+            {
+                return BadRequest("This email is already taken.");
+            }
+
+            await _db.Users.AddAsync(user);
+            await _db.SaveChangesAsync();
+
+            return Ok("Registration is complete.");
+        }
+
+        [HttpGet("Get all roles")]
+        public async Task<IActionResult> GetAllRoles()
+        {
+            var roles = _db.Roles;
+
+            return Ok(roles);
+        }
+    }
+}
+
 ```
