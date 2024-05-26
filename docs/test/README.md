@@ -23,6 +23,6 @@
 ### MySQL
 
 <p align="center">
-  <img src="media/890.png">
+  <img src="./media/890.png">
 </p>
 
